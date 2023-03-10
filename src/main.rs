@@ -25,7 +25,7 @@ fn main() {
     client
         .execute(
             "
-		CREATE TABLE IF NOT EXISTS user (
+		CREATE TABLE IF NOT EXISTS users (
 			user_id     INTEGER NOT NULL PRIMARY KEY,
 			hash		VARCHAR NOT NULL
 		)",
@@ -34,15 +34,16 @@ fn main() {
         .unwrap();
     client
         .execute(
-            "CREATE TABLE IF NOT EXISTS pixel (
-			pixel_id    INTEGER NOT NULL PRIMARY KEY
-			timestamp	TIMESTAMP NOT NULL,
-			user_id		INTEGER NOT NULL REFERENCES user,
+            "
+		CREATE TABLE IF NOT EXISTS pixel (
+			pixel_id    INTEGER NOT NULL PRIMARY KEY,
+			ts			TIMESTAMP NOT NULL,
+			user_id		INTEGER NOT NULL REFERENCES users,
 			color		INTEGER NOT NULL,
 			x1			INTEGER NOT NULL,
 			y1			INTEGER NOT NULL,
 			x2			INTEGER,
-			y2			INTEGER,
+			y2			INTEGER
 		)",
             &[],
         )
@@ -51,7 +52,7 @@ fn main() {
     // Queries used in this program
     let insert_new_user = client
         .prepare_typed(
-            "INSERT INTO user (user_id, hash) VALUES ($1, $2)",
+            "INSERT INTO users (user_id, hash) VALUES ($1, $2)",
             &[Type::INT4, Type::VARCHAR],
         )
         .unwrap();
