@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 csv = "1.2.1"
-postgres = "0.19.4"
+postgres = { version = "0.19.4", features = ["with-chrono-0_4"] }
 serde = { version = "1.0.154", features = ["derive"] }
 
