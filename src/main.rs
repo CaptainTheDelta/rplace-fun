@@ -57,7 +57,7 @@ fn main() {
         )
         .unwrap();
     let insert_pixel = client.prepare_typed(
-		"INSERT INTO pixel (pixel_id, timestamp, user_id, color, x1, y1, x2, y2) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		"INSERT INTO pixel (pixel_id, ts, user_id, color, x1, y1, x2, y2) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 		&[Type::INT4, Type::TIMESTAMP, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4]
 	).unwrap();
 
@@ -71,15 +71,19 @@ fn main() {
     let headers = csv_reader.headers().unwrap().to_owned();
     for (pixel_id, line) in csv_reader.records().enumerate() {
         let record: Record = line.unwrap().deserialize(Some(&headers)).unwrap();
+		let user_hash = record.user_id.clone();
 
         // Retrieving (or generating) the user of the pixel
         let user_id: i32 = *users.entry(record.user_id).or_insert_with(|| {
             let current_id = next_user_id;
             next_user_id += 1;
             // Adding client
-            client.execute(&insert_new_user, &[&current_id]).unwrap();
+            client.execute(&insert_new_user, &[&current_id, &user_hash]).unwrap();
             current_id
         });
+
+		// Timestamp conversion
+		let ts = DateTime::parse_from_str(record.timestamp, "%Y-%m-%d %H:%M:%S%.f %z").unwrap();
 
         // Color conversion to integer
         let color = i32::from_str_radix(&record.pixel_color[1..], 16).unwrap();
