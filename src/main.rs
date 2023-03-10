@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io};
 
+use chrono::DateTime;
 use postgres::{types::Type, Client, NoTls};
 
 const DB_CONFIG: &str = "
@@ -83,7 +84,7 @@ fn main() {
         });
 
 		// Timestamp conversion
-		let ts = DateTime::parse_from_str(record.timestamp, "%Y-%m-%d %H:%M:%S%.f %z").unwrap();
+		let ts = DateTime::parse_from_str(&record.timestamp, "%Y-%m-%d %H:%M:%S%.f %z").unwrap();
 
         // Color conversion to integer
         let color = i32::from_str_radix(&record.pixel_color[1..], 16).unwrap();
@@ -109,7 +110,7 @@ fn main() {
                 &insert_pixel,
                 &[
                     &(pixel_id as i32),
-                    &record.timestamp,
+                    &ts,
                     &user_id,
                     &color,
                     &x1,
