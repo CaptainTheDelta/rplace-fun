@@ -3,13 +3,13 @@ Having fun with the data of r/place 2022
 
 ## Project Milestones
 
- [x] Create a postgres database
- [ ] Initialize it
- [ ] Fill it with the official data
- [ ] Find a way to represent the data
- [ ] Find *amogus*
- [ ] Add a table with the less offficial dump
- [ ] Cross the data
+- [x] Create a postgres database
+- [ ] Initialize it
+- [ ] Fill it with the official data
+- [ ] Find a way to represent the data
+- [ ] Find *amogus*
+- [ ] Add a table with the less offficial dump
+- [ ] Cross the data
 
 ## Create a postgress database
 
