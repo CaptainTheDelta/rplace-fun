@@ -22,7 +22,7 @@ struct Record {
 fn main() -> Result<(), Box<dyn Error>> {
     let no_db = env::args().any(|arg| arg == "--nodb");
     if no_db {
-        println!("nodb flag enabled. There will be no interaction with the database.")
+        eprintln!("nodb flag enabled. There will be no interaction with the database.")
     }
 
     // Connect to the database
@@ -129,18 +129,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         let color = i32::from_str_radix(&record.pixel_color[1..], 16).unwrap();
 
         // Pixel coordinates
-        let str_coords = record.coordinate[1..record.coordinate.len() - 1]
+        let coords: Vec<i32> = record
+            .coordinate
             .split(',')
-            .collect::<Vec<_>>();
-        let coords: Vec<_> = str_coords.iter().map(|x| x.parse::<i32>()).collect();
-        coords
-            .iter()
-            .find(|r| r.is_err())
-            .iter()
-            .inspect(|r| panic!("Error {r:?} while parsing coordinates: {str_coords:?}"))
-            .next();
-        let coords: Vec<_> = coords.into_iter().map(|x| x.unwrap()).collect();
-
+            .map(|x| {
+                x.parse().expect(&format!(
+                    "Error while parsing coordinates: {}",
+                    record.coordinate
+                ))
+            })
+            .collect();
         let (x1, y1, x2, y2) = {
             if coords.len() == 2 {
                 (coords[0], coords[1], None, None)
