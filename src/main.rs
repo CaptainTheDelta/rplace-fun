@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if coords.len() == 2 {
                 (coords[0], coords[1], None, None)
             } else if coords.len() == 4 {
-                (coords[0], coords[1], Some(coords[3]), Some(coords[4]))
+                (coords[0], coords[1], Some(coords[2]), Some(coords[3]))
             } else {
                 panic!("Coordinates are not by two or four at record {pixel_id}")
             }
