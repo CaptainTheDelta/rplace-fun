@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env, error::Error, io};
 
-use chrono::DateTime;
+use chrono::{TimeZone, Utc};
 use postgres::{types::Type, Client, NoTls};
 
 const DB_CONFIG: &str = "
@@ -21,6 +21,9 @@ struct Record {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let no_db = env::args().any(|arg| arg == "--nodb");
+    if no_db {
+        println!("nodb flag enabled. There will be no interaction with the database.")
+    }
 
     // Connect to the database
     let mut client = if no_db {
@@ -115,25 +118,36 @@ fn main() -> Result<(), Box<dyn Error>> {
         });
 
         // Timestamp conversion
-        let ts = DateTime::parse_from_str(&record.timestamp, "%Y-%m-%d %H:%M:%S%.f %z").expect(
-            &format!("Failed to parse this timestamp: {}", record.timestamp),
-        );
+        let ts = Utc
+            .datetime_from_str(&record.timestamp, "%Y-%m-%d %H:%M:%S%.f UTC")
+            .expect(&format!(
+                "Failed to parse this timestamp: {}",
+                record.timestamp
+            ));
 
         // Color conversion to integer
         let color = i32::from_str_radix(&record.pixel_color[1..], 16).unwrap();
 
         // Pixel coordinates
-        let coords: Vec<i32> = record.coordinate[1..record.coordinate.len() - 1]
+        let str_coords = record.coordinate[1..record.coordinate.len() - 1]
             .split(',')
-            .map(|x| x.parse().unwrap())
-            .collect();
+            .collect::<Vec<_>>();
+        let coords: Vec<_> = str_coords.iter().map(|x| x.parse::<i32>()).collect();
+        coords
+            .iter()
+            .find(|r| r.is_err())
+            .iter()
+            .inspect(|r| panic!("Error {r:?} while parsing coordinates: {str_coords:?}"))
+            .next();
+        let coords: Vec<_> = coords.into_iter().map(|x| x.unwrap()).collect();
+
         let (x1, y1, x2, y2) = {
             if coords.len() == 2 {
                 (coords[0], coords[1], None, None)
             } else if coords.len() == 4 {
                 (coords[0], coords[1], Some(coords[3]), Some(coords[4]))
             } else {
-                panic!("Coordinates are not by two or four at record {}", pixel_id)
+                panic!("Coordinates are not by two or four at record {pixel_id}")
             }
         };
 
