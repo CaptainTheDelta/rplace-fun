@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .expect("Query preparation for inserting a new user failed");
             let insert_pixel = c.prepare_typed(
 			"INSERT INTO pixel (pixel_id, ts, user_id, color, x1, y1, x2, y2) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-			&[Type::INT4, Type::TIMESTAMP, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4]
+			&[Type::INT4, Type::TIMESTAMPTZ, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4, Type::INT4]
 		).expect("Query preparation for inserting a new pixel failed");
 
             (Some(insert_new_user), Some(insert_pixel))
