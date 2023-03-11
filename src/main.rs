@@ -163,6 +163,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ));
             }
         };
+
+		if pixel_id % 100_000 == 0 {
+			eprint!("{pixel_id} records processed\r");
+		}
     }
 
     Ok(())
