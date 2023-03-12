@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.23"
 csv = "1.2.1"
-postgres = { version = "0.19.4", features = ["with-chrono-0_4"] }
+diesel = { version = "2.0.3", features = ["postgres", "chrono"] }
+dotenvy = "0.15.6"
+itertools = "0.10.5"
 serde = { version = "1.0.154", features = ["derive"] }
-
