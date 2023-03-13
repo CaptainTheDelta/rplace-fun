@@ -1,6 +1,8 @@
-use std::{collections::HashMap, env, error::Error, io};
+use std::fs::File;
+use std::{collections::HashMap, env, error::Error};
 
 use chrono::NaiveDateTime;
+use csv::ByteRecord;
 use diesel::dsl::count;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -27,23 +29,27 @@ struct UserManager {
 
 impl UserManager {
     fn create(connection: &mut Option<PgConnection>) -> UserManager {
-        let mut mgr = UserManager {
-            users: HashMap::new(),
-            next_user_id: 0,
-            users_to_insert: Vec::new(),
-        };
+        let mut users = HashMap::new();
 
         match connection.iter_mut().next() {
             None => (),
             Some(c) => {
-                let users = users::table.load::<User>(c).expect("Failed to query users");
-                for user in users.into_iter() {
-                    mgr.users.insert(user.hash, user.user_id);
+                for user in users::table
+                    .load::<User>(c)
+                    .expect("Failed to query users")
+                    .into_iter()
+                {
+                    users.insert(user.hash, user.user_id);
                 }
             }
         }
 
-        mgr
+        let next_user_id = users.len() as i32;
+        UserManager {
+            users,
+            next_user_id,
+            users_to_insert: Vec::new(),
+        }
     }
 
     fn get_from_hash(&mut self, hash: &str) -> i32 {
@@ -121,6 +127,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("nodb flag enabled. There will be no interaction with the database.")
     }
 
+    let filepath = env::args()
+        .last()
+        .expect("Expected a file argument at the last position");
+    let file = File::open(filepath).expect("Failed to load the file");
+
     // Connect to the database
     let mut connection = if no_db {
         None
@@ -128,22 +139,45 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(establish_connection())
     };
     // Read the CSV
-    let mut csv_reader = csv::Reader::from_reader(io::stdin());
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .buffer_capacity(1_073_741_824)
+        .from_reader(file);
 
     let mut user_manager = UserManager::create(&mut connection);
     let mut pixel_manager = PixelManager::create(&mut connection);
 
+    println!(
+        "Restarting with {} users and {} pixel records already in the database",
+        user_manager.next_user_id, pixel_manager.pixels_in_db
+    );
+
     // Iterating over records to insert the data in the database
     let headers = csv_reader
-        .headers()
+        .byte_headers()
         .expect("Failed to get CSV headers")
         .to_owned();
 
-    let mut record_consumed = pixel_manager.pixels_in_db;
-    let records_iter = csv_reader
-        .records()
-        .skip(record_consumed)
-        .enumerate()
+    let mut record_consumed = 0;
+    {
+        println!("Skipping already inserted records."); // In an optimized way
+        let mut byte_record = ByteRecord::new();
+        while record_consumed < pixel_manager.pixels_in_db
+            && csv_reader
+                .read_byte_record(&mut byte_record)
+                .expect("Failed to read a byte_record while skipping already inserted records.")
+        {
+            record_consumed += 1;
+        }
+    }
+
+    println!(
+        "Skipped records. Now at position {:?}",
+        csv_reader.position()
+    );
+
+    // Starting enumeration from the number of records consumed, to give the right id to the next records to insert
+    let records_iter = (record_consumed..)
+        .zip(csv_reader.into_byte_records())
         .chunks(10_000);
     for chunk in records_iter.into_iter() {
         for (record_id, line) in chunk {
