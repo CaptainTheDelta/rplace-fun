@@ -1,12 +1,14 @@
 use std::{collections::HashMap, env, error::Error, io};
 
 use chrono::NaiveDateTime;
+use diesel::dsl::count;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use itertools::Itertools;
 
 use rplace_fun::models::{Pixel, User};
+use rplace_fun::schema::pixel::pixel_id;
 use rplace_fun::schema::{pixel, users};
 
 #[derive(Debug, serde::Deserialize)]
@@ -24,12 +26,24 @@ struct UserManager {
 }
 
 impl UserManager {
-    fn create() -> UserManager {
-        UserManager {
+    fn create(connection: &mut Option<PgConnection>) -> UserManager {
+        let mut mgr = UserManager {
             users: HashMap::new(),
             next_user_id: 0,
             users_to_insert: Vec::new(),
+        };
+
+        match connection.iter_mut().next() {
+            None => (),
+            Some(c) => {
+                let users = users::table.load::<User>(c).expect("Failed to query users");
+                for user in users.into_iter() {
+                    mgr.users.insert(user.hash, user.user_id);
+                }
+            }
         }
+
+        mgr
     }
 
     fn get_from_hash(&mut self, hash: &str) -> i32 {
@@ -58,6 +72,41 @@ impl UserManager {
     }
 }
 
+struct PixelManager {
+    pixels_to_insert: Vec<Pixel>,
+    pixels_in_db: usize,
+}
+
+impl PixelManager {
+    fn create(connection: &mut Option<PgConnection>) -> PixelManager {
+        let pixels_in_db = match connection.iter_mut().next() {
+            None => 0,
+            Some(c) => pixel::table
+                .select(count(pixel_id))
+                .first::<i64>(c)
+                .expect("Failed to count pixels") as usize,
+        };
+
+        PixelManager {
+            pixels_to_insert: Vec::new(),
+            pixels_in_db,
+        }
+    }
+
+    fn push(&mut self, p: Pixel) {
+        self.pixels_to_insert.push(p)
+    }
+
+    fn insert_pixels(&mut self, c: &mut PgConnection) {
+        diesel::insert_into(pixel::table)
+            .values(&self.pixels_to_insert)
+            .execute(c)
+            .expect("Failed to insert pixels in the table");
+        self.pixels_in_db += self.pixels_to_insert.len();
+        self.pixels_to_insert.clear();
+    }
+}
+
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
 
@@ -81,7 +130,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Read the CSV
     let mut csv_reader = csv::Reader::from_reader(io::stdin());
 
-    let mut manager = UserManager::create();
+    let mut user_manager = UserManager::create(&mut connection);
+    let mut pixel_manager = PixelManager::create(&mut connection);
 
     // Iterating over records to insert the data in the database
     let headers = csv_reader
@@ -89,13 +139,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Failed to get CSV headers")
         .to_owned();
 
-	let mut record_consumed = 0;
-    let records_iter = csv_reader.records().enumerate().chunks(10_000);
+    let mut record_consumed = pixel_manager.pixels_in_db;
+    let records_iter = csv_reader
+        .records()
+        .skip(record_consumed)
+        .enumerate()
+        .chunks(10_000);
     for chunk in records_iter.into_iter() {
-        let mut pixels: Vec<Pixel> = Vec::new();
-
         for (record_id, line) in chunk {
-            let pixel_id = record_id as i32;
+            let pid = record_id as i32;
             let line = line.unwrap();
             let record: Record = line
                 .deserialize(Some(&headers))
@@ -103,7 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let user_hash = record.user_id.clone();
 
             // Retrieving (or generating) the user of the pixel
-            let user_id = manager.get_from_hash(&user_hash);
+            let user_id = user_manager.get_from_hash(&user_hash);
 
             // Timestamp conversion
             let ts = NaiveDateTime::parse_from_str(&record.timestamp, "%Y-%m-%d %H:%M:%S%.f UTC")
@@ -131,12 +183,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else if coords.len() == 4 {
                     (coords[0], coords[1], Some(coords[2]), Some(coords[3]))
                 } else {
-                    panic!("Coordinates are not by two or four at record {pixel_id}")
+                    panic!("Coordinates are not by two or four at record {pid}")
                 }
             };
 
             let pixel = Pixel {
-                pixel_id,
+                pixel_id: pid,
                 user_id,
                 ts,
                 color,
@@ -145,19 +197,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 x2,
                 y2,
             };
-            pixels.push(pixel);
-			record_consumed += 1;
+            pixel_manager.push(pixel);
+            record_consumed += 1;
         }
 
         match connection.iter_mut().next() {
             None => (),
             Some(c) => {
-                manager.insert_users(c);
+                user_manager.insert_users(c);
                 // Pixel insertion into the database
-                diesel::insert_into(pixel::table)
-                    .values(&pixels)
-                    .execute(c)
-                    .expect("Failed to insert pixels in the table");
+                pixel_manager.insert_pixels(c);
             }
         }
 
